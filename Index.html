@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Return Parts Scanner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=Barlow:wght@400;600&display=swap">
+<style>
+:root{--bg:#e8e9e4;--card:#f6f6f2;--ink:#1c2227;--mute:#5d666d;--line:#c7cac3;--laser:#d4281f;--ok:#1f7a4d;--warn:#a86a00;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15191c;--card:#1f2529;--ink:#eceee8;--mute:#9aa3a9;--line:#343c41;--laser:#ff5a4f;--ok:#4cc38a;--warn:#e8a93a;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#15191c;--card:#1f2529;--ink:#eceee8;--mute:#9aa3a9;--line:#343c41;--laser:#ff5a4f;--ok:#4cc38a;--warn:#e8a93a;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.4 Barlow,system-ui,sans-serif}
+main{max-width:520px;margin:0 auto;padding:16px}
+h1{font:700 28px/1 "Barlow Condensed",Impact,sans-serif;margin:4px 0 14px;letter-spacing:.01em}
+.cam{position:relative;background:#0c0f11;border-radius:10px;overflow:hidden;min-height:150px;display:flex;align-items:center;justify-content:center;color:#9aa3a9;text-align:center}
+.cam p{margin:0;padding:24px;font-size:15px}
+#reader{width:100%}
+#reader video{width:100%!important;display:block}
+.beam{position:absolute;left:8%;right:8%;top:50%;height:2px;background:var(--laser);box-shadow:0 0 8px var(--laser);pointer-events:none;display:none}
+.cam.on .beam{display:block}
+.row{display:flex;gap:8px;margin:10px 0}
+button,.btn{font:600 16px Barlow,system-ui,sans-serif;border:1.5px solid var(--ink);background:var(--card);color:var(--ink);border-radius:8px;padding:12px 14px;min-height:48px;cursor:pointer;flex:1;text-align:center}
+button.primary{background:var(--ink);color:var(--bg)}
+button:focus-visible,input:focus-visible,.btn:focus-within{outline:3px solid var(--laser);outline-offset:2px}
+input[type=text]{flex:2;font:600 18px "Barlow Condensed",sans-serif;letter-spacing:.04em;border:1.5px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:10px 12px;min-height:48px;min-width:0}
+.last{font-size:14px;color:var(--mute);min-height:20px;margin:2px 0 12px}
+.last b{color:var(--ink);font-family:"Barlow Condensed",sans-serif;font-size:17px;letter-spacing:.04em}
+.head{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid var(--ink);padding-bottom:4px;margin-top:18px}
+.head h2{font:700 22px "Barlow Condensed",sans-serif;margin:0}
+.head span{color:var(--mute);font-size:14px}
+ul{list-style:none;margin:0;padding:0}
+li{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+li code{flex:1;font:700 22px "Barlow Condensed",sans-serif;letter-spacing:.05em}
+li small{color:var(--warn);font-size:13px}
+li button{flex:0 0 44px;min-height:44px;padding:0;font-size:20px;border-color:var(--line);color:var(--mute)}
+.empty{color:var(--mute);padding:18px 0;font-size:15px}
+.flash{animation:f .6s}
+@keyframes f{from{background:color-mix(in srgb,var(--ok) 30%,transparent)}to{background:transparent}}
+@media (prefers-reduced-motion:reduce){.flash{animation:none}}
+#msg{min-height:22px;font-size:15px;color:var(--ok);margin:6px 0}
+#msg.err{color:var(--laser)}
+textarea.hid{position:fixed;left:-9999px;top:0;opacity:0}
+</style>
+</head>
+<body>
+<main>
+<h1>Return parts scanner</h1>
+
+<div class="cam" id="cam">
+  <div id="reader"></div>
+  <p id="idle">Camera is off. Tap Start scanning, then hold the barcode inside the frame.</p>
+  <div class="beam"></div>
+</div>
+
+<div class="row">
+  <button class="primary" id="toggle">Start scanning</button>
+  <label class="btn" for="photo" style="flex:1;display:flex;align-items:center;justify-content:center">Scan from photo
+    <input id="photo" type="file" accept="image/*" capture="environment" hidden>
+  </label>
+</div>
+<div class="last" id="last"></div>
+
+<div class="row">
+  <input type="text" id="manual" placeholder="Type a part number" autocapitalize="characters" autocomplete="off" aria-label="Part number">
+  <button id="add" style="flex:1">Add</button>
+</div>
+<div id="msg" role="status" aria-live="polite"></div>
+
+<div class="head"><h2>Parts to return</h2><span id="count">0</span></div>
+<ul id="list"></ul>
+<div class="empty" id="empty">Nothing scanned yet.</div>
+
+<div class="row" style="margin-top:16px">
+  <button class="primary" id="copy">Copy list</button>
+  <button id="clear">Clear list</button>
+</div>
+</main>
+<textarea class="hid" id="ta" aria-hidden="true" tabindex="-1"></textarea>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script>
+(function(){
+var KEY="returnParts.v1", EXPECTED_LEN=10;
+var parts=[], scanner=null, running=false, lastCode="", lastAt=0, armed=false;
+var $=function(id){return document.getElementById(id)};
+
+try{var s=localStorage.getItem(KEY);if(s)parts=JSON.parse(s)||[]}catch(e){parts=[]}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(parts))}catch(e){}}
+
+function say(t,err){var m=$("msg");m.textContent=t;m.className=err?"err":""}
+function beep(){
+  try{navigator.vibrate&&navigator.vibrate(60)}catch(e){}
+  try{var c=new (window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator(),g=c.createGain();
+    o.frequency.value=1100;g.gain.value=.08;o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+.08)}catch(e){}
+}
+
+function render(flashCode){
+  var ul=$("list");ul.innerHTML="";
+  parts.forEach(function(p,i){
+    var li=document.createElement("li");
+    if(p===flashCode)li.className="flash";
+    var code=document.createElement("code");code.textContent=p;li.appendChild(code);
+    if(p.length!==EXPECTED_LEN){var w=document.createElement("small");w.textContent=p.length+" chars";li.appendChild(w)}
+    var b=document.createElement("button");b.textContent="\u00d7";b.setAttribute("aria-label","Remove "+p);
+    b.onclick=function(){parts.splice(i,1);save();render()};
+    li.appendChild(b);ul.appendChild(li);
+  });
+  $("count").textContent=parts.length+(parts.length===1?" part":" parts");
+  $("empty").style.display=parts.length?"none":"block";
+}
+
+function addPart(raw,source){
+  var v=String(raw||"").trim().toUpperCase().replace(/\s+/g,"");
+  if(!v)return false;
+  $("last").innerHTML="Last read: <b></b>";$("last").querySelector("b").textContent=v;
+  if(parts.indexOf(v)!==-1){say(v+" is already on the list.",true);return false}
+  parts.push(v);save();render(v);beep();
+  say("Added "+v+(v.length!==EXPECTED_LEN?" (check: "+v.length+" characters)":"")+".");
+  return true;
+}
+
+function onDecode(text){
+  var now=Date.now();
+  if(text===lastCode&&now-lastAt<2500){lastAt=now;return}
+  lastCode=text;lastAt=now;addPart(text,"scan");
+}
+
+function startCam(){
+  if(!window.Html5Qrcode){say("Scanner library did not load. Use Scan from photo or type the number.",true);return}
+  var F=Html5QrcodeSupportedFormats;
+  scanner=scanner||new Html5Qrcode("reader",{formatsToSupport:[F.CODE_128,F.CODE_39,F.CODE_93,F.ITF,F.EAN_13,F.EAN_8,F.UPC_A,F.DATA_MATRIX,F.QR_CODE],
+    experimentalFeatures:{useBarCodeDetectorIfSupported:true},verbose:false});
+  $("idle").style.display="none";$("cam").classList.add("on");
+  scanner.start({facingMode:"environment"},{fps:10,qrbox:function(w){return{width:Math.floor(w*.85),height:Math.floor(w*.35)}}},onDecode,function(){})
+    .then(function(){running=true;$("toggle").textContent="Stop scanning";say("")})
+    .catch(function(err){
+      running=false;$("cam").classList.remove("on");$("idle").style.display="block";
+      $("idle").textContent="Camera unavailable here. Use Scan from photo or type the number.";
+      say("Could not open the camera. Allow camera access, or use Scan from photo.",true);
+    });
+}
+function stopCam(){
+  if(!scanner||!running)return;
+  scanner.stop().then(function(){scanner.clear()}).catch(function(){}).then(function(){
+    running=false;$("cam").classList.remove("on");$("idle").style.display="block";
+    $("idle").textContent="Camera is off. Tap Start scanning, then hold the barcode inside the frame.";
+    $("toggle").textContent="Start scanning";
+  });
+}
+$("toggle").onclick=function(){running?stopCam():startCam()};
+
+$("photo").onchange=function(e){
+  var f=e.target.files&&e.target.files[0];if(!f)return;
+  if(!window.Html5Qrcode){say("Scanner library did not load.",true);return}
+  var F=Html5QrcodeSupportedFormats;
+  var tmp=new Html5Qrcode("reader",{formatsToSupport:[F.CODE_128,F.CODE_39,F.CODE_93,F.ITF,F.EAN_13,F.UPC_A,F.DATA_MATRIX,F.QR_CODE],verbose:false});
+  tmp.scanFile(f,false).then(function(t){addPart(t,"photo")})
+    .catch(function(){say("No barcode found in that photo. Move closer and keep the bars level.",true)})
+    .then(function(){try{tmp.clear()}catch(x){}e.target.value=""});
+};
+
+$("add").onclick=function(){var i=$("manual");if(addPart(i.value,"manual"))i.value="";i.focus()};
+$("manual").addEventListener("keydown",function(e){if(e.key==="Enter")$("add").click()});
+
+$("copy").onclick=function(){
+  if(!parts.length){say("The list is empty.",true);return}
+  var text=parts.join("\n");
+  function fallback(){var ta=$("ta");ta.value=text;ta.select();try{document.execCommand("copy");say("Copied "+parts.length+" parts.")}catch(e){say("Copy failed. Long-press the list to copy it manually.",true)}}
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){say("Copied "+parts.length+" parts.")},fallback);
+  }else fallback();
+};
+
+$("clear").onclick=function(){
+  if(!parts.length)return;
+  if(!armed){armed=true;$("clear").textContent="Tap again to clear";setTimeout(function(){armed=false;$("clear").textContent="Clear list"},3000);return}
+  parts=[];save();render();armed=false;$("clear").textContent="Clear list";say("List cleared.");
+};
+
+render();
+})();
+</script>
+</body>
+</html>
